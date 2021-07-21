@@ -9,5 +9,3 @@ A conda environment with required modules can be installed using
 ```
 conda create -n neural_operators --file operators-env.txt
 ```
-
-# Usage
