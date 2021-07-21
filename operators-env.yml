@@ -1,0 +1,11 @@
+name: operators-env
+channels:
+  - defaults
+dependencies:
+  - python=3.8
+  - torchaudio==0.7.0
+  - pytorch==1.7.0
+  - torchvision==0.8.0
+  - cudatoolkit=10.2
+  - einops
+  - networkx
