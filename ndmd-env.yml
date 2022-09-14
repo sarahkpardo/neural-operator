@@ -1,0 +1,15 @@
+name: ndmd-env
+channels:
+  - defaults
+dependencies:
+  - pytorch
+  - torchvision
+  - torchaudio
+  - notebook
+  - nb_conda_kernels
+  - pip
+  - einops
+  - matplotlib
+  - scipy
+  - h5py
+  - tqdm

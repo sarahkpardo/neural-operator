@@ -5,18 +5,24 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from math_utils import complex_mul1d, complex_mul2d
+from neural_operators.math_utils import complex_mul1d, complex_mul2d
+
 
 class SpectralConv1d(nn.Module):
-    def __init__(self, in_channels, out_channels, modes, trainable=True):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 modes,
+                 trainable=True):
         super(SpectralConv1d, self).__init__()
+
         """Applies FFT, linear transform, and inverse FFT.
 
         Args:
             in_channels: number of input channels
             out_channels: number of output channels
-            modes: number of Fourier modes to multiply (at most floor(N/2) + 1)
-            train:
+            modes: number of Fourier modes to multiply
+            train: make weights trainable parameters
         """
 
         self.in_channels = in_channels
@@ -25,31 +31,25 @@ class SpectralConv1d(nn.Module):
         self.trainable = trainable
         self.scale = (1 / (in_channels * out_channels))
 
-        self.weights = nn.Parameter(
-            self.scale * torch.rand(in_channels, out_channels, self.modes, 2))
+        self.weights = nn.Parameter(self.scale *
+                                    torch.rand(self.in_channels,
+                                               self.out_channels,
+                                               self.modes,
+                                               dtype=torch.cfloat))
         self.weights.requires_grad = trainable
 
     def forward(self, x):
         batchsize = x.shape[0]
 
         # Compute Fourier coeffcients up to factor of e^(-constant)
-        x_ft = torch.rfft(x, 1, normalized=True, onesided=True)
+        x_ft = torch.fft.rfft(x)
 
         # Multiply relevant Fourier modes
-        out_ft = torch.zeros(batchsize,
-                             self.in_channels,
-                             x.size(-1) // 2 + 1,
-                             2,
-                             device=x.device)
-        out_ft[:, :, :self.modes] = complex_mul1d(x_ft[:, :, :self.modes],
-                                                  self.weights)
+        out_ft = complex_mul1d(x_ft[:, :, :self.modes],
+                               self.weights)
 
         # Return to physical space
-        x = torch.irfft(out_ft,
-                        1,
-                        normalized=True,
-                        onesided=True,
-                        signal_sizes=(x.size(-1), ))
+        x = torch.fft.irfft(out_ft,n=x.size(-1))
 
         return x
 
@@ -198,7 +198,10 @@ class SpectralConv2d(nn.Module):
         batchsize = x.shape[0]
 
         # Compute Fourier coeffcients up to factor of e^(- something constant)
-        x_ft = torch.rfft(x, 2, normalized=True, onesided=True)
+        x_ft = torch.fft.rfft(x, 2,
+                              norm="forward",
+                              #normalized=True, onesided=True
+                              )
 
         # Apply transform consisting of truncated Fourier modes
         out_ft = torch.zeros(batchsize,
@@ -217,11 +220,13 @@ class SpectralConv2d(nn.Module):
                           self.weights2)
 
         # Return to physical space
-        x = torch.irfft(out_ft,
+        x = torch.fft.irfft(out_ft,
                         2,
-                        normalized=True,
-                        onesided=True,
-                        signal_sizes=(x.size(-2), x.size(-1)))
+                        norm="forward",
+                        #normalized=True,
+                        #onesided=True,
+                        #signal_sizes=(x.size(-2), x.size(-1))
+                        )
 
         return x
 

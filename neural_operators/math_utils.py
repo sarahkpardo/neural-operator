@@ -6,7 +6,7 @@ import torch
 
 
 def complex_mul1d(a, b):
-    """Performs complex multiplication between 1d input tensors.
+    """Performs complex multiplication between two input tensors.
 
     Args:
     a: tensor of shape (batch, in_channel, x)
@@ -14,12 +14,7 @@ def complex_mul1d(a, b):
 
     return: tensor of form (batch, out_channel, x)
     """
-    op = partial(torch.einsum, "bix,iox->box")
-    return torch.stack([
-        op(a[..., 0], b[..., 0]) - op(a[..., 1], b[..., 1]),
-        op(a[..., 1], b[..., 0]) + op(a[..., 0], b[..., 1])
-    ],
-                       dim=-1)
+    return torch.einsum("bix,iox->box", a, b)
 
 
 def complex_mul2d(a, b):
@@ -31,12 +26,7 @@ def complex_mul2d(a, b):
 
     return: tensor of form (batch, out_channel, x, y)
     """
-    op = partial(torch.einsum, "bixy,ioxy->boxy")
-    return torch.stack([
-        op(a[..., 0], b[..., 0]) - op(a[..., 1], b[..., 1]),
-        op(a[..., 1], b[..., 0]) + op(a[..., 0], b[..., 1])
-    ],
-                       dim=-1)
+    return torch.einsum("bixy,ioxy->boxy", a, b)
 
 
 def complex_mul3d(a, b):
@@ -48,12 +38,7 @@ def complex_mul3d(a, b):
 
     return: tensor of form (batch, out_channel, x, y, z)
     """
-    op = partial(torch.einsum, "bixyz,ioxyz->boxyz")
-    return torch.stack([
-        op(a[..., 0], b[..., 0]) - op(a[..., 1], b[..., 1]),
-        op(a[..., 1], b[..., 0]) + op(a[..., 0], b[..., 1])
-    ],
-                       dim=-1)
+    return torch.einsum("bixyz,ioxyz->boxyz", a, b)
 
 
 class UnitGaussianNormalizer():

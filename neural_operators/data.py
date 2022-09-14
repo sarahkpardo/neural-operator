@@ -1,10 +1,251 @@
-from pathlib import Path
+from timeit import default_timer
 
 import h5py
 from einops import rearrange, reduce, repeat
 import numpy as np
+import scipy.io
 from scipy.io import loadmat
 import torch
+
+
+class MatReader(object):
+    def __init__(self, file_path, to_torch=True, to_cuda=False, to_float=True):
+        super(MatReader, self).__init__()
+
+        self.to_torch = to_torch
+        self.to_cuda = to_cuda
+        self.to_float = to_float
+
+        self.file_path = file_path
+
+        self.data = None
+        self.old_mat = None
+        self._load_file()
+
+    def _load_file(self):
+        try:
+            self.data = scipy.io.loadmat(self.file_path)
+            self.old_mat = True
+        except:
+            self.data = h5py.File(self.file_path)
+            self.old_mat = False
+
+    def load_file(self, file_path):
+        self.file_path = file_path
+        self._load_file()
+
+    def read_field(self, field):
+        x = self.data[field]
+
+        if not self.old_mat:
+            x = x[()]
+            x = np.transpose(x, axes=range(len(x.shape) - 1, -1, -1))
+
+        if self.to_float:
+            x = x.astype(np.float32)
+
+        if self.to_torch:
+            x = torch.from_numpy(x)
+
+            if self.to_cuda:
+                x = x.cuda()
+
+        return x
+
+    def set_cuda(self, to_cuda):
+        self.to_cuda = to_cuda
+
+    def set_torch(self, to_torch):
+        self.to_torch = to_torch
+
+    def set_float(self, to_float):
+        self.to_float = to_float
+
+
+def mat_to_tensor1d(TRAIN_PATH,
+                    TEST_PATH,
+                    ss_rate,
+                    x_field, y_field,
+                    vsamples=None,
+                    normalize=False):
+    """Converts .mat file contents to torch tensors.
+
+        Args:
+            TRAIN_PATH: list of .mat file names to concatenate into training
+                        tensors
+            TEST_PATH: list of .mat file names to concatenate into test tensors
+            ss_rate: [train subsampling rate, test rate]
+            x_field, y_field: names of fields in the .mat file
+            vsamples: [ntest, ntrain]
+            print: Print log contents to the console; default = True
+            normalize: Apply normalization to the tensors; default = False
+    """
+    t1 = default_timer()
+
+    reader = MatReader(TRAIN_PATH)
+    x_data = reader.read_field(x_field)
+    y_data = reader.read_field(y_field)
+    dimension = len(x_data.shape) - 1
+
+    mat_info = ("input signal vector samples: {}\n"
+                "output signal vector samples: {}\n"
+                "input signal entry samples: {}\n"
+                "output signal entry samples: {}\n"
+                "signal dimension: {}\n\n"
+                ).format(x_data.shape[0],
+                         y_data.shape[0],
+                         x_data.shape[1],
+                         y_data.shape[1],
+                         dimension)
+
+    ntrain = vsamples[0]
+    ntest = vsamples[1]
+
+    full_res = x_data.shape[1]
+    tr_ss = ss_rate[0]
+    tst_ss = ss_rate[1]
+    tr_esamples = int(((full_res - 1) / tr_ss) + 1)
+
+    x_train = x_data[ntrain:, ::tr_ss][:, :tr_esamples]
+    y_train = y_data[ntrain:, ::tr_ss][:, :tr_esamples]
+
+    if TRAIN_PATH != TEST_PATH:
+        # using separate test/train datasets
+        test_reader = MatReader(TEST_PATH)
+        x_test = test_reader.read_field(x_field)
+        y_test = test_reader.read_field(y_field)
+
+        full_res = x_test.shape[1]
+        tst_esamples = int(((full_res - 1) / tst_ss) + 1)
+
+        x_test = x_test[ntest:, ::tst_ss][:, :tst_esamples]
+        y_test = y_test[ntest:, ::tst_ss][:, :tst_esamples]
+
+    else:
+        full_res = x_data.shape[1]
+        tst_esamples = int(((full_res - 1) / tst_ss) + 1)
+
+        # same dataset; use last (ntest) samples
+        x_test = x_data[-ntest:, ::tst_ss][:, :tst_esamples]
+        y_test = y_data[-ntest:, ::tst_ss][:, :tst_esamples]
+
+    ds_info = ("training dataset: {}\n"
+               "test dataset: {}\n\n"
+               "input train samples: {}\n"
+               "output train samples: {}\n"
+               "input train resolution: {}\n"
+               "output train resolution: {}\n\n"
+               "input test samples: {}\n"
+               "output test samples: {}\n"
+               "input test resolution: {}\n"
+               "output test resolution: {}\n\n"
+               ).format(TRAIN_PATH,
+                        TEST_PATH,
+                        x_train.shape[0],
+                        y_train.shape[0],
+                        x_train.shape[1],
+                        y_train.shape[1],
+                        x_test.shape[0],
+                        y_test.shape[0],
+                        x_test.shape[1],
+                        y_test.shape[1])
+
+    t2 = default_timer()
+
+    return x_train, y_train, x_test, y_test, mat_info, ds_info
+
+
+def mat_to_tensor2d(TRAIN_PATH,
+                    TEST_PATH,
+                    ss_rate,
+                    x_field, y_field,
+                    vsamples=None,
+                    normalize=False):
+    """Converts .mat file contents to torch tensors.
+
+        Args:
+            TRAIN_PATH: list of .mat file names to concatenate into training
+                        tensors
+            TEST_PATH: list of .mat file names to concatenate into test tensors
+            ss_rate: [train subsampling rate, test rate]
+            x_field, y_field: names of fields in the .mat file
+            vsamples: [ntest, ntrain]
+            print: Print log contents to the console; default = True
+            normalize: Apply normalization to the tensors; default = False
+    """
+    t1 = default_timer()
+
+    reader = MatReader(TRAIN_PATH)
+    x_data = reader.read_field(x_field)
+    y_data = reader.read_field(y_field)
+    dimension = len(x_data.shape) - 1
+
+    mat_info = ("input signal vector samples: {}\n"
+                "output signal vector samples: {}\n"
+                "input signal entry samples: {}\n"
+                "output signal entry samples: {}\n"
+                "signal dimension: {}\n\n"
+                ).format(x_data.shape[0],
+                         y_data.shape[0],
+                         x_data.shape[1],
+                         y_data.shape[1],
+                         dimension)
+
+    ntrain = vsamples[0]
+    ntest = vsamples[1]
+
+    full_res = x_data.shape[1]
+    tr_ss = ss_rate[0]
+    tst_ss = ss_rate[1]
+    tr_esamples = int(((full_res - 1) / tr_ss) + 1)
+
+    x_train = x_data[:ntrain, ::tr_ss, ::tr_ss][:, :tr_esamples, :tr_esamples]
+    y_train = y_data[:ntrain, ::tr_ss, ::tr_ss][:, :tr_esamples, :tr_esamples]
+
+    if TRAIN_PATH != TEST_PATH:
+        # using separate test/train datasets
+        test_reader = MatReader(TEST_PATH)
+        x_test = test_reader.read_field(x_field)
+        y_test = test_reader.read_field(y_field)
+
+        full_res = x_test.shape[1]
+        tst_esamples = int(((full_res - 1) / tst_ss) + 1)
+
+        x_test = x_test[:ntest, ::tst_ss, ::tst_ss][:, :tst_esamples, :tst_esamples]
+        y_test = y_test[:ntest, ::tst_ss, ::tst_ss][:, :tst_esamples, :tst_esamples]
+
+    else:
+        full_res = x_data.shape[1]
+        tst_esamples = int(((full_res - 1) / tst_ss) + 1)
+
+        # same dataset; use last (ntest) samples
+        x_test = x_data[-ntest:, ::tst_ss, ::tst_ss][:, :tst_esamples, :tst_esamples]
+        y_test = y_data[-ntest:, ::tst_ss, ::tst_ss][:, :tst_esamples, :tst_esamples]
+
+    ds_info = ("training dataset: {}\n"
+               "test dataset: {}\n\n"
+               "input train samples: {}\n"
+               "output train samples: {}\n"
+               "input train resolution: {}\n"
+               "output train resolution: {}\n\n"
+               "input test samples: {}\n"
+               "output test samples: {}\n"
+               "input test resolution: {}\n"
+               "output test resolution: {}\n\n"
+               ).format(TRAIN_PATH,
+                        TEST_PATH,
+                        x_train.shape[0],
+                        y_train.shape[0],
+                        x_train.shape[1],
+                        y_train.shape[1],
+                        x_test.shape[0],
+                        y_test.shape[0],
+                        x_test.shape[1],
+                        y_test.shape[1])
+
+    t2 = default_timer()
+
+    return x_train, y_train, x_test, y_test, mat_info, ds_info
 
 
 def read_data(
@@ -271,3 +512,4 @@ class FunctionDataset2D(FunctionDataset):
                                 name='test_data')
 
         return train_DL, test_DL
+
