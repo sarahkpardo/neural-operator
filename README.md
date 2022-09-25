@@ -7,5 +7,5 @@ Neural networks designed for operator-valued functional learning problems.
 A conda environment with required modules can be installed using
 
 ```
-conda env create -f operators-env.yml
+conda env create -f ndmd-env.yml
 ```
